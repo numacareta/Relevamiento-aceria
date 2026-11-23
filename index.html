@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Relevamiento Acería — Visor</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+  #map { height: 100%; }
+
+  /* ---- TÍTULO ---- */
+  #titulo {
+    position: absolute; top: 10px; left: 50px; z-index: 1000;
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.95);
+    padding: 8px 14px; border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    border-left: 5px solid #e53935;
+  }
+  #logo {
+    height: 40px;
+    width: auto;
+    object-fit: contain;
+  }
+  #titulo h1 { margin: 0; font-size: 17px; color: #263238; letter-spacing: 0.3px; }
+  #titulo p  { margin: 2px 0 0; font-size: 11px; color: #666; }
+  #actualizado { margin: 2px 0 0; font-size: 10px; color: #999; }
+
+  /* ---- POPUP ---- */
+  .popup-foto { width: 280px; }
+  .popup-foto .cabecera {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 6px; flex-wrap: wrap;
+  }
+  .popup-foto .fecha {
+    background: #263238; color: #fff; font-weight: 600;
+    font-size: 12px; padding: 2px 8px; border-radius: 10px;
+  }
+  .popup-foto .tarea {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: #e3f2fd; color: #1565c0;
+  }
+  .popup-foto img {
+    width: 100%; border-radius: 6px; display: block;
+    background: #eee; min-height: 60px;
+  }
+  .popup-foto .obs {
+    background: #fff8e1; border-left: 3px solid #ffb300;
+    padding: 6px 8px; border-radius: 4px; margin: 6px 0;
+    font-size: 13px; line-height: 1.4;
+  }
+  .popup-foto .obs b { color: #8d6e00; }
+
+  /* ---- LEYENDA / FILTROS ---- */
+  #leyenda {
+    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    background: #fff; padding: 8px 12px; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2); font-size: 12px;
+  }
+  #leyenda label { display: block; margin: 3px 0; cursor: pointer; }
+  #leyenda .dot {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 50%; margin-right: 5px; vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="titulo">
+  <img src="logo.png" alt="Logo" id="logo" onerror="this.style.display='none'">
+  <div>
+    <h1>Relevamiento Acería</h1>
+    <p>Monitoreo de terraplenes, desagües y basurales</p>
+    <p id="actualizado"></p>
+  </div>
+</div>
+
+<div id="leyenda"><b>Filtrar por tarea</b><div id="filtros"></div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="data.js"></script>
+<script>
+const COLORES = {
+  relevamiento_terraplen:        "#e53935",
+  control_de_desag_es_y_canales: "#1e88e5",
+  monitoreo_basurales:           "#43a047",
+};
+const SIN_TAREA = "#757575";
+
+const map = L.map("map").setView([-31.616, -60.574], 16);
+
+L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const capas = {};
+function capaDe(t) {
+  if (!capas[t]) capas[t] = L.layerGroup().addTo(map);
+  return capas[t];
+}
+
+DATA.forEach(d => {
+  if (d.lat == null || d.lon == null) return;
+  const t = d.tarea || "(sin tarea)";
+  const color = COLORES[t] || SIN_TAREA;
+
+  const m = L.circleMarker([d.lat, d.lon], {
+    radius: 8, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1
+  });
+
+  const imgHtml = d.foto
+    ? `<img src="${d.foto}" alt="foto"
+            onerror="this.onerror=null;this.outerHTML='<div style=\\'height:100px;display:flex;align-items:center;justify-content:center;background:#eee;border-radius:6px;font-size:12px;color:#666\\'>Foto no encontrada</div>';"
+            style="width:100%;border-radius:6px;display:block;">`
+    : `<div style="height:60px;display:flex;align-items:center;justify-content:center;background:#eee;border-radius:6px;font-size:12px;color:#666">Sin foto</div>`;
+
+  const fechaTxt = d.dia_mes || "—";
+  const obsTxt   = d.observaciones && d.observaciones.trim() ? d.observaciones : null;
+
+  m.bindPopup(`
+    <div class="popup-foto">
+      <div class="cabecera">
+        <span class="fecha">📅 ${fechaTxt}</span>
+        <span class="tarea" style="background:${color}22;color:${color}"><b>${t}</b></span>
+      </div>
+      ${imgHtml}
+      ${obsTxt ? `<div class="obs"><b>Observaciones:</b> ${obsTxt}</div>` : ""}
+    </div>`, { maxWidth: 300 });
+
+  m.addTo(capaDe(t));
+});
+
+// Filtros por tarea
+const tareasPresentes = [...new Set(DATA.filter(d => d.lat != null).map(d => d.tarea || "(sin tarea)"))];
+const cont = document.getElementById("filtros");
+tareasPresentes.forEach(t => {
+  const color = COLORES[t] || SIN_TAREA;
+  const id = "f_" + t.replace(/\W/g, "_");
+  const lbl = document.createElement("label");
+  lbl.innerHTML = `<input type="checkbox" id="${id}" checked> <span class="dot" style="background:${color}"></span>${t}`;
+  cont.appendChild(lbl);
+  lbl.querySelector("input").addEventListener("change", e => {
+    if (e.target.checked) map.addLayer(capaDe(t));
+    else map.removeLayer(capaDe(t));
+  });
+});
+
+// Ajustar vista
+const pts = DATA.filter(d => d.lat != null).map(d => [d.lat, d.lon]);
+if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.15));
+
+// Fecha de actualización
+document.getElementById("actualizado").textContent =
+  "Actualizado: " + new Date().toLocaleDateString("es-AR");
+</script>
+</body>
+</html>
